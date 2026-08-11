@@ -371,6 +371,7 @@ input[type=date],input[type=time]{cursor:pointer;}
 
     <div class="submit-bar">
       <span class="status-msg" id="status-msg"></span>
+      <button class="btn-primary" id="copy-summary-btn" style="display:none;background:var(--panel2);color:var(--text);border:1px solid var(--line);" onclick="copyLastSummary()">Copiar resumen</button>
       <button class="btn-primary" id="submit-btn" onclick="submitInforme()">Guardar informe</button>
     </div>
   </div>
@@ -418,6 +419,7 @@ const EVENT_COLS = ["horaIni","horaFin","tag","tipo","modo","causa","desc","rep"
 
 let rowCounter = 0;
 let historialCache = null;
+let lastSavedRecord = null;
 
 function uid(){ return 'r'+Math.random().toString(36).slice(2,9)+Date.now().toString(36); }
 
@@ -583,6 +585,8 @@ async function submitInforme(){
 
     document.getElementById('status-msg').textContent = '';
     toast('Informe guardado correctamente.');
+    lastSavedRecord = record;
+    document.getElementById('copy-summary-btn').style.display = 'inline-block';
     resetForm();
     historialCache = null;
   }catch(err){
@@ -677,6 +681,76 @@ function formatFecha_(iso){
   const p = iso.split('-');
   if(p.length !== 3) return iso;
   return `${p[2]}/${p[1]}/${p[0]}`;
+}
+
+/* ---------- resumen de texto para compartir ---------- */
+function buildSummaryText(rec){
+  const lineas = [];
+  lineas.push(`*INFORME DE TURNO*`);
+  lineas.push(`${rec.turno||'—'}  ·  ${formatFecha_(rec.fecha)}`);
+  lineas.push(`Reporta: ${rec.reporta||'—'}${rec.recibe?`  |  Recibe: ${rec.recibe}`:''}`);
+  if(rec.tecnicos) lineas.push(`Técnicos: ${rec.tecnicos}`);
+  lineas.push('');
+  lineas.push(`*Producción*`);
+  LINEAS.forEach(l=>{
+    const p = (rec.produccion && rec.produccion[l]) || {};
+    if(p.m3 || p.min){
+      lineas.push(`${l}: ${p.m3||0} m³ - ${p.min||0} min mtto`);
+    }
+  });
+
+  AREAS.forEach(area=>{
+    const rows = (rec.eventos && rec.eventos[area]) || [];
+    if(rows.length===0) return;
+    lineas.push('');
+    lineas.push(`*${area.toUpperCase()}*`);
+    rows.forEach(ev=>{
+      const rango = (ev.horaIni||ev.horaFin) ? `${ev.horaIni||'—'}-${ev.horaFin||'—'} ` : '';
+      const dur = eventDuration(ev.horaIni, ev.horaFin);
+      const partes = [
+        rango + (ev.tag||'S/TAG'),
+        ev.modo,
+        ev.desc,
+        ev.estado ? `[${ev.estado}]` : '',
+        dur ? `(${dur})` : ''
+      ].filter(Boolean);
+      lineas.push(`- ${partes.join(' · ')}`);
+    });
+  });
+
+  if(rec.pendientes && rec.pendientes.length){
+    lineas.push('');
+    lineas.push(`*PENDIENTES*`);
+    rec.pendientes.forEach(p=>{
+      if(p.equipo || p.pendiente) lineas.push(`- ${p.equipo||'S/Equipo'}: ${p.pendiente||''}`);
+    });
+  }
+
+  return lineas.join('\n');
+}
+
+async function copyLastSummary(){
+  if(!lastSavedRecord){ toast('No hay un informe reciente para resumir.'); return; }
+  const text = buildSummaryText(lastSavedRecord);
+  try{
+    await navigator.clipboard.writeText(text);
+    toast('Resumen copiado. Puedes pegarlo en WhatsApp o SMS.');
+  }catch(e){
+    // Fallback para navegadores que bloquean el portapapeles
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try{
+      document.execCommand('copy');
+      toast('Resumen copiado. Puedes pegarlo en WhatsApp o SMS.');
+    }catch(e2){
+      toast('No se pudo copiar automáticamente. Selecciona el texto manualmente.');
+    }
+    document.body.removeChild(ta);
+  }
 }
 
 function escapeHtml(s){
