@@ -93,15 +93,19 @@ input,select,textarea{
 }
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--amber);}
 textarea{resize:vertical;min-height:38px;font-family:var(--sans);}
-input[type=time], input[type=date]{font-family:var(--mono);}
+input[type=time], input[type=date], input[type=week], input[type=month]{font-family:var(--mono);}
 input[type=date]::-webkit-calendar-picker-indicator,
-input[type=time]::-webkit-calendar-picker-indicator{
+input[type=time]::-webkit-calendar-picker-indicator,
+input[type=week]::-webkit-calendar-picker-indicator,
+input[type=month]::-webkit-calendar-picker-indicator{
   filter:invert(0.75) sepia(1) saturate(3) hue-rotate(300deg);
   cursor:pointer;opacity:0.85;
 }
 input[type=date]::-webkit-calendar-picker-indicator:hover,
-input[type=time]::-webkit-calendar-picker-indicator:hover{opacity:1;}
-input[type=date],input[type=time]{cursor:pointer;}
+input[type=time]::-webkit-calendar-picker-indicator:hover,
+input[type=week]::-webkit-calendar-picker-indicator:hover,
+input[type=month]::-webkit-calendar-picker-indicator:hover{opacity:1;}
+input[type=date],input[type=time],input[type=week],input[type=month]{cursor:pointer;}
 
 /* production table */
 .prod-table{width:100%;border-collapse:collapse;}
@@ -165,6 +169,30 @@ input[type=date],input[type=time]{cursor:pointer;}
 
 /* history view */
 .hist-filters{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+
+/* indicadores */
+.ind-hero{
+  display:flex;align-items:center;gap:16px;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;padding:20px 24px;margin-bottom:18px;
+}
+.ind-hero .num{font-family:var(--mono);font-size:38px;font-weight:700;color:var(--amber);line-height:1;}
+.ind-hero .label{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:0.5px;}
+.ind-table-wrap{overflow-x:auto;}
+.ind-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+.ind-table th{
+  text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;color:var(--muted);
+  padding:12px 14px;background:var(--panel2);border-bottom:1px solid var(--line);white-space:nowrap;
+}
+.ind-table td{padding:11px 14px;border-bottom:1px solid var(--line);font-size:13.5px;white-space:nowrap;}
+.ind-table tr:last-child td{border-bottom:none;}
+.ind-table td:first-child{font-weight:700;}
+.ind-table td.mttr{color:var(--teal);font-family:var(--mono);}
+.ind-section-title{font-size:13px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);margin:22px 0 10px;font-weight:600;}
+.ind-refresh{
+  background:transparent;border:1px solid var(--line);color:var(--muted);padding:7px 14px;border-radius:6px;
+  cursor:pointer;font-size:12.5px;font-weight:600;margin-bottom:14px;
+}
+.ind-refresh:hover{border-color:var(--amber);color:var(--amber);}
 .hist-filters input,.hist-filters select{width:auto;min-width:150px;}
 .hist-empty{color:var(--muted);text-align:center;padding:60px 20px;font-size:14px;}
 .hist-empty .big{font-size:34px;display:block;margin-bottom:8px;}
@@ -236,6 +264,7 @@ input[type=date],input[type=time]{cursor:pointer;}
     <div class="tabs">
       <button class="tab-btn active" id="tab-form" onclick="switchView('form')">Nuevo informe</button>
       <button class="tab-btn" id="tab-hist" onclick="switchView('hist')">Histórico</button>
+      <button class="tab-btn" id="tab-ind" onclick="switchView('ind')">Indicadores</button>
     </div>
   </div>
 </div>
@@ -349,7 +378,7 @@ input[type=date],input[type=time]{cursor:pointer;}
         <p style="color:var(--muted);font-size:12.5px;margin-top:0;">Un evento = una fila. Cada evento con falla debe llevar hora de inicio y fin (para MTTR).</p>
         <div id="areas-container"></div>
         <div class="glossary">
-          <b>Campos clave — glosario rápido:</b> TAG: código único del activo en el CMMS. Tipo Mantto.: Correctivo no programado / Correctivo programado / Preventivo / Predictivo. Modo de falla: cómo falló (atascamiento, fractura, cortocircuito…). Causa raíz: por qué falló (mecánica, eléctrica, instrumentación, lubricación, operacional). Estado: Cerrado / Pendiente / Escalado.
+          <b>Campos clave — glosario rápido:</b> EQUIPO: nombre o código del activo. Tipo Mantto.: Correctivo no programado / Correctivo programado. Modo de falla: cómo falló (atascamiento, fractura, cortocircuito…). Causa raíz: por qué falló (mecánica, eléctrica, instrumentación, lubricación, operacional). Estado: Cerrado / Pendiente / Escalado.
         </div>
       </div>
     </div>
@@ -379,7 +408,7 @@ input[type=date],input[type=time]{cursor:pointer;}
   <!-- ===================== HISTORY VIEW ===================== -->
   <div class="view" id="view-hist">
     <div class="hist-filters">
-      <input type="text" id="h-search" placeholder="Buscar por reportante, técnico, TAG..." oninput="renderHistory()" style="min-width:240px;">
+      <input type="text" id="h-search" placeholder="Buscar por reportante, técnico, equipo..." oninput="renderHistory()" style="min-width:240px;">
       <select id="h-turno" onchange="renderHistory()">
         <option value="">Todos los turnos</option>
         <option>Turno 1</option><option>Turno 2</option><option>Turno 3</option>
@@ -388,6 +417,19 @@ input[type=date],input[type=time]{cursor:pointer;}
       <input type="date" id="h-hasta" onchange="renderHistory()">
     </div>
     <div id="hist-list"></div>
+  </div>
+
+  <!-- ===================== INDICADORES VIEW ===================== -->
+  <div class="view" id="view-ind">
+    <div class="hist-filters" id="ind-filters" style="display:none;">
+      <div class="field" style="min-width:140px;"><label>Día</label><input type="date" id="ind-day"></div>
+      <div class="field" style="min-width:140px;"><label>Semana</label><input type="week" id="ind-week"></div>
+      <div class="field" style="min-width:140px;"><label>Mes</label><input type="month" id="ind-month"></div>
+      <div class="field" style="min-width:100px;"><label>Año</label><input type="number" id="ind-year" min="2020" max="2100" step="1"></div>
+    </div>
+    <div id="ind-content">
+      <div class="hist-empty">Cargando indicadores...</div>
+    </div>
   </div>
 
 </main>
@@ -413,7 +455,7 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzEZCodZrZuJI
 
 const AREAS = ["Maderas","Secador","Contiroll","Finalizado","Laminadora 1","Laminadora 2","Servicios industriales"];
 const LINEAS = ["Contiroll","Finalizado","Laminado 1","Laminado 2"];
-const TIPO_MANTTO = ["Correctivo no programado","Correctivo programado","Preventivo","Predictivo"];
+const TIPO_MANTTO = ["Correctivo no programado","Correctivo programado"];
 const ESTADOS = ["Cerrado","Pendiente","Escalado"];
 const EVENT_COLS = ["horaIni","horaFin","tag","tipo","modo","causa","desc","rep","estado"];
 
@@ -428,9 +470,12 @@ function togglePanel(head){ head.parentElement.classList.toggle('collapsed'); }
 function switchView(v){
   document.getElementById('view-form').classList.toggle('active', v==='form');
   document.getElementById('view-hist').classList.toggle('active', v==='hist');
+  document.getElementById('view-ind').classList.toggle('active', v==='ind');
   document.getElementById('tab-form').classList.toggle('active', v==='form');
   document.getElementById('tab-hist').classList.toggle('active', v==='hist');
+  document.getElementById('tab-ind').classList.toggle('active', v==='ind');
   if(v==='hist') loadHistory();
+  if(v==='ind') loadIndicadores();
 }
 
 /* ---------- build production table ---------- */
@@ -450,7 +495,7 @@ function eventRowHTML(id){
   <tr data-row="${id}">
     <td><input type="time" data-f="horaIni"></td>
     <td><input type="time" data-f="horaFin"></td>
-    <td><input type="text" class="tag" data-f="tag" placeholder="TAG"></td>
+    <td><input type="text" class="tag" data-f="tag" placeholder="EQUIPO"></td>
     <td><select data-f="tipo"><option value=""></option>${TIPO_MANTTO.map(t=>`<option>${t}</option>`).join('')}</select></td>
     <td><input type="text" data-f="modo" placeholder="Modo de falla"></td>
     <td class="col-comp"><textarea data-f="causa" placeholder="Causa raíz / componente"></textarea></td>
@@ -475,7 +520,7 @@ function buildAreas(){
         <div class="event-scroll">
           <table class="event-table" id="tbl-${safe}">
             <thead><tr>
-              <th>Hora inicio</th><th>Hora fin</th><th>TAG</th><th>Tipo Mantto.</th><th>Modo de falla</th>
+              <th>Hora inicio</th><th>Hora fin</th><th>EQUIPO</th><th>Tipo Mantto.</th><th>Modo de falla</th>
               <th>Causa raíz / Componente</th><th>Descripción</th><th>Repuestos/Insumos</th><th>Estado</th><th></th>
             </tr></thead>
             <tbody id="body-${safe}"></tbody>
@@ -589,6 +634,7 @@ async function submitInforme(){
     document.getElementById('copy-summary-btn').style.display = 'inline-block';
     resetForm();
     historialCache = null;
+    indicadoresCache = null;
   }catch(err){
     console.error(err);
     document.getElementById('status-msg').textContent = '';
@@ -676,6 +722,60 @@ function eventDuration(ini, fin){
   return `${hh>0?hh+'h ':''}${mm}min`;
 }
 
+// Igual que eventDuration pero devuelve minutos numéricos (para sumar/promediar)
+function durationMinutes(ini, fin){
+  if(!ini || !fin) return null;
+  const [h1,m1] = ini.split(':').map(Number);
+  const [h2,m2] = fin.split(':').map(Number);
+  if([h1,m1,h2,m2].some(isNaN)) return null;
+  let mins = (h2*60+m2) - (h1*60+m1);
+  if(mins < 0) mins += 24*60;
+  return mins;
+}
+
+function formatMinutos_(mins){
+  if(!mins || mins <= 0) return '0min';
+  const hh = Math.floor(mins/60), mm = Math.round(mins%60);
+  return `${hh>0?hh+'h ':''}${mm}min`;
+}
+
+function formatMttrMin_(mins){
+  if(mins === null || mins === undefined) return '—';
+  return `${Math.round(mins)} min`;
+}
+
+function pad2_(n){ return String(n).padStart(2,'0'); }
+
+function toISODate_(d){
+  return `${d.getFullYear()}-${pad2_(d.getMonth()+1)}-${pad2_(d.getDate())}`;
+}
+
+// Devuelve el string "YYYY-Www" (semana ISO) correspondiente a una fecha
+function getISOWeekString_(date){
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+  return `${d.getUTCFullYear()}-W${pad2_(weekNo)}`;
+}
+
+// Convierte "YYYY-Www" en el rango {start, end} (lunes a domingo) en formato ISO yyyy-mm-dd
+function isoWeekToRange_(weekStr){
+  if(!weekStr) return null;
+  const [yearStr, wStr] = weekStr.split('-W');
+  const year = parseInt(yearStr,10), week = parseInt(wStr,10);
+  if(isNaN(year) || isNaN(week)) return null;
+  const simple = new Date(year, 0, 1 + (week-1)*7);
+  const dow = simple.getDay();
+  const start = new Date(simple);
+  if(dow <= 4) start.setDate(simple.getDate() - dow + 1);
+  else start.setDate(simple.getDate() + 8 - dow);
+  const end = new Date(start);
+  end.setDate(end.getDate()+6);
+  return { start: toISODate_(start), end: toISODate_(end) };
+}
+
 function formatFecha_(iso){
   if(!iso) return '—';
   const p = iso.split('-');
@@ -708,7 +808,7 @@ function buildSummaryText(rec){
       const rango = (ev.horaIni||ev.horaFin) ? `${ev.horaIni||'—'}-${ev.horaFin||'—'} ` : '';
       const dur = eventDuration(ev.horaIni, ev.horaFin);
       const partes = [
-        rango + (ev.tag||'S/TAG'),
+        rango + (ev.tag||'S/EQUIPO'),
         ev.modo,
         ev.desc,
         ev.estado ? `[${ev.estado}]` : '',
@@ -831,6 +931,135 @@ function closeModal(){
   document.getElementById('overlay').classList.remove('show');
 }
 
+/* ---------- indicadores ---------- */
+let indicadoresRawRecords = null; // registros crudos (sin filtrar), cacheados
+
+function setDefaultIndFilters_(){
+  const today = new Date();
+  document.getElementById('ind-day').value = toISODate_(today);
+  document.getElementById('ind-week').value = getISOWeekString_(today);
+  document.getElementById('ind-month').value = `${today.getFullYear()}-${pad2_(today.getMonth()+1)}`;
+  document.getElementById('ind-year').value = today.getFullYear();
+}
+
+async function loadIndicadores(force){
+  const cont = document.getElementById('ind-content');
+  if(!scriptConfigured()){
+    cont.innerHTML = '<div class="hist-empty"><span class="big">&#9888;</span>Falta conectar la URL de Apps Script en el código (GOOGLE_SCRIPT_URL).</div>';
+    return;
+  }
+  if(indicadoresRawRecords && !force){
+    renderIndicadores();
+    return;
+  }
+  cont.innerHTML = '<div class="hist-empty">Calculando indicadores...</div>';
+  try{
+    const res = await fetch(GOOGLE_SCRIPT_URL, { method: 'GET' });
+    const json = await res.json();
+    indicadoresRawRecords = json.ok ? json.records : [];
+    document.getElementById('ind-filters').style.display = 'flex';
+    if(force || !document.getElementById('ind-day').value){
+      setDefaultIndFilters_();
+    }
+    renderIndicadores();
+  }catch(e){
+    cont.innerHTML = '<div class="hist-empty"><span class="big">&#9888;</span>No se pudo cargar los indicadores. Revisa la conexión con Apps Script.</div>';
+  }
+}
+
+function computeIndicadores(records, filtros){
+  const porArea = {};
+  AREAS.forEach(a => { porArea[a] = { day:0, week:0, month:0, year:0, totalDur:0, totalCount:0, evCount:0 }; });
+
+  let totalEventos = 0;
+  const weekRange = filtros.week ? isoWeekToRange_(filtros.week) : null;
+
+  records.forEach(rec => {
+    const fecha = rec.fecha || '';
+
+    AREAS.forEach(area => {
+      const rows = (rec.eventos && rec.eventos[area]) || [];
+      rows.forEach(ev => {
+        totalEventos++;
+        porArea[area].evCount++;
+        const mins = durationMinutes(ev.horaIni, ev.horaFin);
+        if(mins === null) return;
+
+        // MTTR y conteo son SIEMPRE acumulados (todo el histórico)
+        porArea[area].totalDur += mins;
+        porArea[area].totalCount++;
+
+        if(!fecha) return;
+        if(filtros.day && fecha === filtros.day) porArea[area].day += mins;
+        if(weekRange && fecha >= weekRange.start && fecha <= weekRange.end) porArea[area].week += mins;
+        if(filtros.month && fecha.slice(0,7) === filtros.month) porArea[area].month += mins;
+        if(filtros.year && fecha.slice(0,4) === String(filtros.year)) porArea[area].year += mins;
+      });
+    });
+  });
+
+  return { totalEventos, porArea };
+}
+
+function renderIndicadores(){
+  const cont = document.getElementById('ind-content');
+  if(!indicadoresRawRecords) return;
+
+  const filtros = {
+    day: document.getElementById('ind-day').value,
+    week: document.getElementById('ind-week').value,
+    month: document.getElementById('ind-month').value,
+    year: document.getElementById('ind-year').value
+  };
+  const stats = computeIndicadores(indicadoresRawRecords, filtros);
+
+  const filasParada = AREAS.map(area => {
+    const d = stats.porArea[area];
+    return `<tr>
+      <td>${area}</td>
+      <td>${formatMinutos_(d.day)}</td>
+      <td>${formatMinutos_(d.week)}</td>
+      <td>${formatMinutos_(d.month)}</td>
+      <td>${formatMinutos_(d.year)}</td>
+    </tr>`;
+  }).join('');
+
+  const filasMttr = AREAS.map(area => {
+    const d = stats.porArea[area];
+    const mttr = d.totalCount > 0 ? formatMttrMin_(d.totalDur / d.totalCount) : '—';
+    return `<tr>
+      <td>${area}</td>
+      <td>${d.evCount}</td>
+      <td class="mttr">${mttr}</td>
+    </tr>`;
+  }).join('');
+
+  cont.innerHTML = `
+    <button class="ind-refresh" onclick="loadIndicadores(true)">&#8635; Actualizar</button>
+
+    <div class="ind-hero">
+      <div class="num">${stats.totalEventos}</div>
+      <div class="label">Eventos registrados<br>totales</div>
+    </div>
+
+    <div class="ind-section-title">Tiempo de parada por área / línea (según fecha seleccionada arriba)</div>
+    <div class="ind-table-wrap">
+      <table class="ind-table">
+        <thead><tr><th>Área / Línea</th><th>Día</th><th>Semana</th><th>Mes</th><th>Año</th></tr></thead>
+        <tbody>${filasParada}</tbody>
+      </table>
+    </div>
+
+    <div class="ind-section-title">MTTR promedio acumulado por área / línea (minutos, todo el histórico)</div>
+    <div class="ind-table-wrap">
+      <table class="ind-table">
+        <thead><tr><th>Área / Línea</th><th>Eventos con duración</th><th>MTTR promedio (min)</th></tr></thead>
+        <tbody>${filasMttr}</tbody>
+      </table>
+    </div>
+  `;
+}
+
 /* ---------- init ---------- */
 buildProdTable();
 buildAreas();
@@ -839,9 +1068,13 @@ document.getElementById('f-fecha').valueAsDate = new Date();
 
 document.addEventListener('click', (e)=>{
   const el = e.target;
-  if(el.tagName==='INPUT' && (el.type==='date' || el.type==='time') && typeof el.showPicker==='function'){
+  if(el.tagName==='INPUT' && (el.type==='date' || el.type==='time' || el.type==='week' || el.type==='month') && typeof el.showPicker==='function'){
     try{ el.showPicker(); }catch(err){}
   }
+});
+
+['ind-day','ind-week','ind-month','ind-year'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', ()=> renderIndicadores());
 });
 </script>
 
