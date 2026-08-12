@@ -116,7 +116,7 @@ input[type=date],input[type=time],input[type=week],input[type=month]{cursor:poin
 
 /* event tables */
 .event-scroll{overflow-x:auto;}
-.event-table{width:100%;border-collapse:collapse;min-width:920px;}
+.event-table{width:100%;border-collapse:collapse;min-width:1240px;}
 .event-table th{
   text-align:left;font-size:10.5px;text-transform:uppercase;color:var(--muted);
   letter-spacing:0.4px;padding:0 6px 8px;font-weight:600;white-space:nowrap;
@@ -242,7 +242,6 @@ input[type=date],input[type=time],input[type=week],input[type=month]{cursor:poin
 .mod-event .ev-state{margin-left:auto;font-family:var(--sans);font-weight:700;}
 .mod-event .ev-state.Cerrado{color:var(--teal);}
 .mod-event .ev-state.Pendiente{color:var(--amber);}
-.mod-event .ev-state.Escalado{color:var(--red);}
 .toast{
   position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
   background:var(--panel2);border:1px solid var(--amber);color:var(--text);
@@ -401,7 +400,8 @@ input[type=date],input[type=time],input[type=week],input[type=month]{cursor:poin
     <div class="submit-bar">
       <span class="status-msg" id="status-msg"></span>
       <button class="btn-primary" id="copy-summary-btn" style="display:none;background:var(--panel2);color:var(--text);border:1px solid var(--line);" onclick="copyLastSummary()">Copiar resumen</button>
-      <button class="btn-primary" id="submit-btn" onclick="submitInforme()">Guardar informe</button>
+      <button class="btn-primary" id="save-draft-btn" style="background:var(--panel2);color:var(--text);border:1px solid var(--line);" onclick="saveDraftLocal()">Guardar informe</button>
+      <button class="btn-primary" id="submit-btn" onclick="submitInforme()">Enviar Informe</button>
     </div>
   </div>
 
@@ -438,7 +438,10 @@ input[type=date],input[type=time],input[type=week],input[type=month]{cursor:poin
   <div class="modal">
     <div class="modal-head">
       <h3 id="modal-title"></h3>
-      <button class="modal-close" onclick="closeModal()">&times;</button>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="ind-refresh" onclick="copyModalSummary()">Copiar resumen</button>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
     </div>
     <div class="modal-body" id="modal-body"></div>
   </div>
@@ -456,12 +459,15 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzEZCodZrZuJI
 const AREAS = ["Maderas","Secador","Contiroll","Finalizado","Laminadora 1","Laminadora 2","Servicios industriales"];
 const LINEAS = ["Contiroll","Finalizado","Laminado 1","Laminado 2"];
 const TIPO_MANTTO = ["Correctivo no programado","Correctivo programado"];
-const ESTADOS = ["Cerrado","Pendiente","Escalado"];
-const EVENT_COLS = ["horaIni","horaFin","tag","tipo","modo","causa","desc","rep","estado"];
+const ESTADOS = ["Cerrado","Pendiente"];
+const GENERA_PARADA = ["Sí","No"];
+const CAUSANTE = ["PRD","MTTO","Otros"];
+const EVENT_COLS = ["horaIni","horaFin","tag","tipo","modo","causa","desc","rep","paradaLinea","causante","tecnicos","estado"];
 
 let rowCounter = 0;
 let historialCache = null;
 let lastSavedRecord = null;
+let currentModalRecord = null;
 
 function uid(){ return 'r'+Math.random().toString(36).slice(2,9)+Date.now().toString(36); }
 
@@ -501,6 +507,9 @@ function eventRowHTML(id){
     <td class="col-comp"><textarea data-f="causa" placeholder="Causa raíz / componente"></textarea></td>
     <td class="col-desc"><textarea data-f="desc" placeholder="Descripción"></textarea></td>
     <td class="col-rep"><input type="text" data-f="rep" placeholder="Repuestos/Insumos"></td>
+    <td><select data-f="paradaLinea"><option value=""></option>${GENERA_PARADA.map(g=>`<option>${g}</option>`).join('')}</select></td>
+    <td><select data-f="causante"><option value=""></option>${CAUSANTE.map(c=>`<option>${c}</option>`).join('')}</select></td>
+    <td><input type="number" min="0" step="1" class="tecnicos-count" data-f="tecnicos" placeholder="#" style="width:60px;"></td>
     <td><select data-f="estado"><option value=""></option>${ESTADOS.map(e=>`<option>${e}</option>`).join('')}</select></td>
     <td class="rm"><button class="rm-btn" onclick="this.closest('tr').remove()" type="button">&times;</button></td>
   </tr>`;
@@ -521,7 +530,7 @@ function buildAreas(){
           <table class="event-table" id="tbl-${safe}">
             <thead><tr>
               <th>Hora inicio</th><th>Hora fin</th><th>EQUIPO</th><th>Tipo Mantto.</th><th>Modo de falla</th>
-              <th>Causa raíz / Componente</th><th>Descripción</th><th>Repuestos/Insumos</th><th>Estado</th><th></th>
+              <th>Causa raíz / Componente</th><th>Descripción</th><th>Repuestos/Insumos</th><th>Genera parada de línea</th><th>Área que generó la parada</th><th>Técnicos</th><th>Estado</th><th></th>
             </tr></thead>
             <tbody id="body-${safe}"></tbody>
           </table>
@@ -595,6 +604,78 @@ function resetForm(){
   buildProdTable();
   buildAreas();
   document.getElementById('pend-body').innerHTML='';
+  addPendiente();
+}
+
+/* ---------- guardado local (borrador) mientras se completa el informe ---------- */
+const DRAFT_KEY = 'informeDraftV1';
+
+function saveDraftLocal(){
+  const data = collectForm();
+  try{
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+    toast('Informe guardado en este dispositivo. Aún no se ha enviado a la base de datos — continúa completándolo o da clic en "Enviar Informe" cuando esté listo.');
+  }catch(e){
+    toast('No se pudo guardar localmente en este navegador.');
+  }
+}
+
+function clearDraftLocal(){
+  try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
+}
+
+function loadDraftLocal(){
+  let raw;
+  try{ raw = localStorage.getItem(DRAFT_KEY); }catch(e){ return; }
+  if(!raw) return;
+  let data;
+  try{ data = JSON.parse(raw); }catch(e){ return; }
+  populateForm(data);
+  toast('Se recuperó un informe guardado que aún no se había enviado.');
+}
+
+function populateForm(data){
+  document.getElementById('f-fecha').value = data.fecha || '';
+  document.getElementById('f-turno').value = data.turno || '';
+  document.getElementById('f-reporta').value = data.reporta || '';
+  document.getElementById('f-recibe').value = data.recibe || '';
+  document.getElementById('f-tecnicos').value = data.tecnicos || '';
+
+  document.querySelectorAll('#prod-body tr').forEach(tr=>{
+    const linea = tr.dataset.linea;
+    const p = (data.produccion && data.produccion[linea]) || {};
+    tr.querySelector('.prod-m3').value = p.m3 || '';
+    tr.querySelector('.prod-min').value = p.min || '';
+  });
+
+  AREAS.forEach(area=>{
+    const safe = area.replace(/\s+/g,'-');
+    const body = document.getElementById('body-'+safe);
+    body.innerHTML = '';
+    const rows = (data.eventos && data.eventos[area]) || [];
+    rows.forEach(ev=>{
+      body.insertAdjacentHTML('beforeend', eventRowHTML(++rowCounter));
+      const tr = body.lastElementChild;
+      Object.keys(ev).forEach(key=>{
+        const el = tr.querySelector(`[data-f="${key}"]`);
+        if(el) el.value = ev[key];
+      });
+    });
+  });
+
+  const pendBody = document.getElementById('pend-body');
+  pendBody.innerHTML = '';
+  const pendientes = data.pendientes || [];
+  if(pendientes.length === 0){
+    addPendiente();
+  }else{
+    pendientes.forEach(p=>{
+      addPendiente();
+      const tr = pendBody.lastElementChild;
+      tr.querySelector('[data-f="equipo"]').value = p.equipo || '';
+      tr.querySelector('[data-f="pendiente"]').value = p.pendiente || '';
+    });
+  }
 }
 
 /* ---------- submit / storage (Google Apps Script backend) ---------- */
@@ -605,16 +686,20 @@ function scriptConfigured(){
 async function submitInforme(){
   const data = collectForm();
   if(!data.fecha || !data.turno || !data.reporta){
-    toast('Completa fecha, turno y reporta antes de guardar.');
+    toast('Completa fecha, turno y reporta antes de enviar.');
     return;
   }
   if(!scriptConfigured()){
     toast('Falta conectar la URL de Apps Script en el código (GOOGLE_SCRIPT_URL).');
     return;
   }
+  const confirmado = window.confirm('¿Está seguro de guardar el informe?\n\n¿El reporte del turno ya está completo?');
+  if(!confirmado){
+    return; // el usuario vuelve al formulario para terminar de completarlo
+  }
   const btn = document.getElementById('submit-btn');
   btn.disabled = true;
-  document.getElementById('status-msg').textContent = 'Guardando...';
+  document.getElementById('status-msg').textContent = 'Enviando...';
   const id = uid();
   const record = {...data, id, createdAt: new Date().toISOString()};
 
@@ -629,16 +714,17 @@ async function submitInforme(){
     if(!json.ok) throw new Error(json.error || 'Error desconocido');
 
     document.getElementById('status-msg').textContent = '';
-    toast('Informe guardado correctamente.');
+    toast('Informe enviado correctamente.');
     lastSavedRecord = record;
     document.getElementById('copy-summary-btn').style.display = 'inline-block';
+    clearDraftLocal();
     resetForm();
     historialCache = null;
-    indicadoresCache = null;
+    indicadoresRawRecords = null;
   }catch(err){
     console.error(err);
     document.getElementById('status-msg').textContent = '';
-    toast('No se pudo guardar el informe. Revisa la conexión con Apps Script.');
+    toast('No se pudo enviar el informe. Revisa la conexión con Apps Script.');
   }
   btn.disabled = false;
 }
@@ -811,6 +897,9 @@ function buildSummaryText(rec){
         rango + (ev.tag||'S/EQUIPO'),
         ev.modo,
         ev.desc,
+        ev.paradaLinea ? `Parada línea: ${ev.paradaLinea}` : '',
+        ev.causante ? `Área causante: ${ev.causante}` : '',
+        ev.tecnicos ? `Técnicos: ${ev.tecnicos}` : '',
         ev.estado ? `[${ev.estado}]` : '',
         dur ? `(${dur})` : ''
       ].filter(Boolean);
@@ -829,9 +918,9 @@ function buildSummaryText(rec){
   return lineas.join('\n');
 }
 
-async function copyLastSummary(){
-  if(!lastSavedRecord){ toast('No hay un informe reciente para resumir.'); return; }
-  const text = buildSummaryText(lastSavedRecord);
+async function copySummaryRecord(rec){
+  if(!rec){ toast('No hay informe para resumir.'); return; }
+  const text = buildSummaryText(rec);
   try{
     await navigator.clipboard.writeText(text);
     toast('Resumen copiado. Puedes pegarlo en WhatsApp o SMS.');
@@ -853,6 +942,14 @@ async function copyLastSummary(){
   }
 }
 
+function copyLastSummary(){
+  copySummaryRecord(lastSavedRecord);
+}
+
+function copyModalSummary(){
+  copySummaryRecord(currentModalRecord);
+}
+
 function escapeHtml(s){
   const d = document.createElement('div');
   d.textContent = s;
@@ -866,6 +963,7 @@ function openRecord(id){
 }
 
 function renderModal(rec){
+  currentModalRecord = rec;
   document.getElementById('modal-title').textContent = `${rec.turno||''} · ${formatFecha_(rec.fecha)} — ${rec.reporta||''}`;
 
   let html = `
@@ -910,6 +1008,8 @@ function renderModal(rec){
         ${ev.causa?`<div><b style="color:var(--muted);font-size:11px;">Causa raíz/Componente:</b> ${escapeHtml(ev.causa)}</div>`:''}
         ${ev.desc?`<div><b style="color:var(--muted);font-size:11px;">Descripción:</b> ${escapeHtml(ev.desc)}</div>`:''}
         ${ev.rep?`<div><b style="color:var(--muted);font-size:11px;">Repuestos/Insumos:</b> ${escapeHtml(ev.rep)}</div>`:''}
+        ${(ev.paradaLinea||ev.causante)?`<div><b style="color:var(--muted);font-size:11px;">Genera parada de línea:</b> ${escapeHtml(ev.paradaLinea||'—')}${ev.causante?`  ·  <b style="color:var(--muted);font-size:11px;">Área que generó la parada:</b> ${escapeHtml(ev.causante)}`:''}</div>`:''}
+        ${ev.tecnicos?`<div><b style="color:var(--muted);font-size:11px;">Técnicos que participaron:</b> ${escapeHtml(String(ev.tecnicos))}</div>`:''}
       </div>`;
     });
     html += `</div>`;
@@ -971,6 +1071,8 @@ function computeIndicadores(records, filtros){
   const porArea = {};
   AREAS.forEach(a => { porArea[a] = { day:0, week:0, month:0, year:0, totalDur:0, totalCount:0, evCount:0 }; });
 
+  const equipoMap = {}; // acumulado por equipo (TAG), todo el histórico
+
   let totalEventos = 0;
   const weekRange = filtros.week ? isoWeekToRange_(filtros.week) : null;
 
@@ -982,8 +1084,16 @@ function computeIndicadores(records, filtros){
       rows.forEach(ev => {
         totalEventos++;
         porArea[area].evCount++;
+
+        // Acumulado por equipo (para el Top 20)
+        const equipoKey = (ev.tag || '').trim() || 'Sin equipo';
+        if(!equipoMap[equipoKey]) equipoMap[equipoKey] = { equipo: equipoKey, area, count: 0, dur: 0 };
+        equipoMap[equipoKey].count++;
+
         const mins = durationMinutes(ev.horaIni, ev.horaFin);
         if(mins === null) return;
+
+        equipoMap[equipoKey].dur += mins;
 
         // MTTR y conteo son SIEMPRE acumulados (todo el histórico)
         porArea[area].totalDur += mins;
@@ -998,7 +1108,11 @@ function computeIndicadores(records, filtros){
     });
   });
 
-  return { totalEventos, porArea };
+  const topEquipos = Object.values(equipoMap)
+    .sort((a,b) => b.dur - a.dur)
+    .slice(0,20);
+
+  return { totalEventos, porArea, topEquipos };
 }
 
 function renderIndicadores(){
@@ -1034,6 +1148,15 @@ function renderIndicadores(){
     </tr>`;
   }).join('');
 
+  const filasTop = stats.topEquipos.length > 0 ? stats.topEquipos.map((eq,i) => `
+    <tr>
+      <td>${i+1}</td>
+      <td>${escapeHtml(eq.equipo)}</td>
+      <td>${escapeHtml(eq.area)}</td>
+      <td>${eq.count}</td>
+      <td class="mttr">${formatMinutos_(eq.dur)}</td>
+    </tr>`).join('') : `<tr><td colspan="5" style="color:var(--muted);text-align:center;">Sin datos aún</td></tr>`;
+
   cont.innerHTML = `
     <button class="ind-refresh" onclick="loadIndicadores(true)">&#8635; Actualizar</button>
 
@@ -1057,6 +1180,14 @@ function renderIndicadores(){
         <tbody>${filasMttr}</tbody>
       </table>
     </div>
+
+    <div class="ind-section-title">Top 20 equipos con más tiempo en eventos (acumulado, todo el histórico)</div>
+    <div class="ind-table-wrap">
+      <table class="ind-table">
+        <thead><tr><th>#</th><th>Equipo</th><th>Área</th><th>Eventos</th><th>Tiempo total</th></tr></thead>
+        <tbody>${filasTop}</tbody>
+      </table>
+    </div>
   `;
 }
 
@@ -1065,6 +1196,7 @@ buildProdTable();
 buildAreas();
 addPendiente();
 document.getElementById('f-fecha').valueAsDate = new Date();
+loadDraftLocal();
 
 document.addEventListener('click', (e)=>{
   const el = e.target;
