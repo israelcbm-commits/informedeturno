@@ -269,6 +269,7 @@ input[type=date],input[type=time],input[type=week],input[type=month]{cursor:poin
   position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
   background:var(--panel2);border:1px solid var(--amber);color:var(--text);
   padding:11px 20px;border-radius:8px;font-size:13px;z-index:100;display:none;
+  max-width:90vw;width:max-content;text-align:center;
 }
 </style>
 </head>
@@ -796,17 +797,17 @@ async function submitInforme(){
   }catch(err){
     console.error(err);
     document.getElementById('status-msg').textContent = '';
-    toast('No se pudo enviar el informe. Revisa la conexión con Apps Script.');
+    toast('No se pudo enviar: ' + (err && err.message ? err.message : String(err)), 9000);
   }
   btn.disabled = false;
 }
 
-function toast(msg){
+function toast(msg, duracionMs){
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.style.display = 'block';
   clearTimeout(window._toastTimer);
-  window._toastTimer = setTimeout(()=>{ t.style.display='none'; }, 3200);
+  window._toastTimer = setTimeout(()=>{ t.style.display='none'; }, duracionMs || 3200);
 }
 
 /* ---------- history ---------- */
