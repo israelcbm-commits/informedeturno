@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es-CO">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -99,17 +99,17 @@ main{max-width:1080px;margin:0 auto;padding:28px 20px;}
 .tec-ms-panel{
   display:none;position:absolute;top:100%;left:0;z-index:30;margin-top:2px;
   background:#171016;border:1px solid var(--line);border-radius:6px;
-  min-width:200px;max-height:220px;overflow-y:auto;padding:6px;
+  min-width:260px;max-height:260px;overflow-y:auto;padding:6px;
   box-shadow:0 8px 20px rgba(0,0,0,0.5);
 }
 .tec-ms-panel.show{display:block;}
-.tec-ms-panel label{
+.tec-ms-panel .tec-row{
   display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;
   font-size:12.5px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text);
-  cursor:pointer;white-space:nowrap;
+  white-space:nowrap;cursor:pointer;
 }
-.tec-ms-panel label:hover{background:var(--panel2);}
-.tec-ms-panel input[type=checkbox]{width:auto;margin:0;accent-color:var(--amber);}
+.tec-ms-panel .tec-row:hover{background:var(--panel2);}
+.tec-ms-panel input[type=checkbox]{width:auto;margin:0;flex-shrink:0;accent-color:var(--amber);}
 input,select,textarea{
   width:100%;background:#0d1217;border:1px solid var(--line);color:var(--text);
   padding:9px 10px;border-radius:6px;font-family:var(--sans);font-size:13.5px;
@@ -303,6 +303,7 @@ input[type=date],input[type=time],input[type=week],input[type=month]{cursor:poin
         <span class="chev">&#9660;</span>
       </div>
       <div class="panel-body">
+        <p style="color:var(--muted);font-size:12.5px;margin-top:0;">Este informe es colaborativo: varias personas pueden registrar por separado sus propias intervenciones del mismo turno, y se combinan automáticamente en un solo informe. Solo necesitas la <b style="color:var(--text);">fecha</b> y el <b style="color:var(--text);">turno</b> — los demás campos son opcionales.</p>
         <div class="field-grid">
           <div class="field"><label>Fecha *</label><input type="date" id="f-fecha"></div>
           <div class="field"><label>Turno *</label>
@@ -311,7 +312,7 @@ input[type=date],input[type=time],input[type=week],input[type=month]{cursor:poin
               <option>Turno 1</option><option>Turno 2</option><option>Turno 3</option>
             </select>
           </div>
-          <div class="field"><label>Reporta *</label>
+          <div class="field"><label>Reporta</label>
             <select id="f-reporta">
               <option value="">Seleccionar</option>
               <option>FABIAN CASTILLO</option>
@@ -401,7 +402,7 @@ input[type=date],input[type=time],input[type=week],input[type=month]{cursor:poin
         <p style="color:var(--muted);font-size:12.5px;margin-top:0;">Un evento = una fila. Cada evento con falla debe llevar hora de inicio y fin (para MTTR).</p>
         <div id="areas-container"></div>
         <div class="glossary">
-          <b>Campos clave — glosario rápido:</b> EQUIPO: nombre o código del activo. Tipo Mantto.: Correctivo no programado / Correctivo programado. Modo de falla: cómo falló (atascamiento, fractura, cortocircuito…). Causa raíz: por qué falló (mecánica, eléctrica, instrumentación, lubricación, operacional). Estado: Cerrado / Pendiente / Escalado.
+          <b>Campos clave — glosario rápido:</b> EQUIPO: nombre o código del activo. Tipo Mantto.: Correctivo no programado / Correctivo programado. Modo de falla: cómo falló (atascamiento, fractura, cortocircuito…). Causa raíz: por qué falló (mecánica, eléctrica, instrumentación, lubricación, operacional). Estado: Cerrado / Pendiente.
         </div>
       </div>
     </div>
@@ -524,8 +525,8 @@ function buildProdTable(){
 function eventRowHTML(id){
   return `
   <tr data-row="${id}">
-    <td><input type="time" data-f="horaIni"></td>
-    <td><input type="time" data-f="horaFin"></td>
+    <td><input type="time" data-f="horaIni" lang="es-CO"></td>
+    <td><input type="time" data-f="horaFin" lang="es-CO"></td>
     <td><input type="text" class="tag" data-f="tag" placeholder="EQUIPO"></td>
     <td><select data-f="tipo"><option value=""></option>${TIPO_MANTTO.map(t=>`<option>${t}</option>`).join('')}</select></td>
     <td><input type="text" data-f="modo" placeholder="Modo de falla"></td>
@@ -539,7 +540,7 @@ function eventRowHTML(id){
         <input type="hidden" data-f="tecnicos">
         <button type="button" class="tec-ms-btn" onclick="toggleTecPanel(this)">Seleccionar...</button>
         <div class="tec-ms-panel">
-          ${NOMBRES_TECNICOS.map(n=>`<label><input type="checkbox" value="${n}" onchange="syncTecHidden(this)"> ${n}</label>`).join('')}
+          ${NOMBRES_TECNICOS.map(n=>`<label class="tec-row"><input type="checkbox" value="${n}" onchange="syncTecHidden(this)"> ${n}</label>`).join('')}
         </div>
       </div>
     </td>
@@ -588,8 +589,8 @@ function toggleTecPanel(btn){
 }
 
 function syncTecHidden(checkbox){
-  const panel = checkbox.closest('.tec-ms-panel');
   const wrap = checkbox.closest('.tec-multiselect');
+  const panel = wrap.querySelector('.tec-ms-panel');
   const hidden = wrap.querySelector('input[type=hidden]');
   const btn = wrap.querySelector('.tec-ms-btn');
   const seleccionados = Array.from(panel.querySelectorAll('input[type=checkbox]:checked')).map(c => c.value);
@@ -758,15 +759,15 @@ function scriptConfigured(){
 
 async function submitInforme(){
   const data = collectForm();
-  if(!data.fecha || !data.turno || !data.reporta){
-    toast('Completa fecha, turno y reporta antes de enviar.');
+  if(!data.fecha || !data.turno){
+    toast('Completa al menos fecha y turno antes de enviar.');
     return;
   }
   if(!scriptConfigured()){
     toast('Falta conectar la URL de Apps Script en el código (GOOGLE_SCRIPT_URL).');
     return;
   }
-  const confirmado = window.confirm('¿Está seguro de guardar el informe?\n\n¿El reporte del turno ya está completo?');
+  const confirmado = window.confirm('¿Está seguro de enviar tu registro?\n\n¿La información que documentaste ya está completa?');
   if(!confirmado){
     return; // el usuario vuelve al formulario para terminar de completarlo
   }
@@ -882,6 +883,18 @@ function eventDuration(ini, fin){
 }
 
 // Igual que eventDuration pero devuelve minutos numéricos (para sumar/promediar)
+// Formatea el campo de técnicos de un evento (array de {nombre,minutos},
+// JSON en texto, o un string plano heredado) en un texto legible.
+function formatTecnicosEvento_(tecnicos){
+  if(!tecnicos) return '';
+  let lista = tecnicos;
+  if(typeof lista === 'string'){
+    try{ lista = JSON.parse(lista); }catch(e){ return lista; } // texto plano heredado
+  }
+  if(!Array.isArray(lista)) return String(tecnicos);
+  return lista.map(t => t && t.nombre ? (t.minutos ? `${t.nombre} (${t.minutos}min)` : t.nombre) : '').filter(Boolean).join(', ');
+}
+
 function durationMinutes(ini, fin){
   if(!ini || !fin) return null;
   const [h1,m1] = ini.split(':').map(Number);
@@ -972,7 +985,7 @@ function buildSummaryText(rec){
         ev.desc,
         ev.paradaLinea ? `Parada línea: ${ev.paradaLinea}` : '',
         ev.causante ? `Área causante: ${ev.causante}` : '',
-        ev.tecnicos ? `Técnicos: ${ev.tecnicos}` : '',
+        ev.tecnicos ? `Técnicos: ${formatTecnicosEvento_(ev.tecnicos)}` : '',
         ev.estado ? `[${ev.estado}]` : '',
         dur ? `(${dur})` : ''
       ].filter(Boolean);
@@ -1082,7 +1095,7 @@ function renderModal(rec){
         ${ev.desc?`<div><b style="color:var(--muted);font-size:11px;">Descripción:</b> ${escapeHtml(ev.desc)}</div>`:''}
         ${ev.rep?`<div><b style="color:var(--muted);font-size:11px;">Repuestos/Insumos:</b> ${escapeHtml(ev.rep)}</div>`:''}
         ${(ev.paradaLinea||ev.causante)?`<div><b style="color:var(--muted);font-size:11px;">Genera parada de línea:</b> ${escapeHtml(ev.paradaLinea||'—')}${ev.causante?`  ·  <b style="color:var(--muted);font-size:11px;">Área que generó la parada:</b> ${escapeHtml(ev.causante)}`:''}</div>`:''}
-        ${ev.tecnicos?`<div><b style="color:var(--muted);font-size:11px;">Técnicos que participaron:</b> ${escapeHtml(String(ev.tecnicos))}</div>`:''}
+        ${ev.tecnicos?`<div><b style="color:var(--muted);font-size:11px;">Técnicos que participaron:</b> ${escapeHtml(formatTecnicosEvento_(ev.tecnicos))}</div>`:''}
       </div>`;
     });
     html += `</div>`;
