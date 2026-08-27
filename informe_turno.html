@@ -89,6 +89,14 @@ main{max-width:1080px;margin:0 auto;padding:28px 20px;}
 .field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:0.6px;color:var(--muted);margin-bottom:5px;font-weight:600;}
 
 /* multi-select desplegable de técnicos */
+/* selector de hora en formato 24h (militar), independiente de la configuración del equipo */
+.hora24-wrap{display:flex;align-items:center;gap:2px;white-space:nowrap;}
+.hora24-wrap select{
+  width:44px;padding:6px 2px;text-align:center;font-family:var(--mono);
+  background:#0d1217;border:1px solid var(--line);color:var(--text);border-radius:5px;font-size:12.5px;
+}
+.hora24-wrap span{color:var(--muted);font-family:var(--mono);}
+
 .tec-multiselect{position:relative;width:150px;}
 .tec-ms-btn{
   width:100%;background:#0d1217;border:1px solid var(--line);color:var(--text);
@@ -525,8 +533,22 @@ function buildProdTable(){
 function eventRowHTML(id){
   return `
   <tr data-row="${id}">
-    <td><input type="time" data-f="horaIni" lang="es-CO"></td>
-    <td><input type="time" data-f="horaFin" lang="es-CO"></td>
+    <td>
+      <div class="hora24-wrap">
+        <input type="hidden" data-f="horaIni">
+        <select class="hora24-h" onchange="syncHora24_(this)"><option value=""></option>${Array.from({length:24},(_,i)=>`<option>${String(i).padStart(2,'0')}</option>`).join('')}</select>
+        <span>:</span>
+        <select class="hora24-m" onchange="syncHora24_(this)"><option value=""></option>${Array.from({length:60},(_,i)=>`<option>${String(i).padStart(2,'0')}</option>`).join('')}</select>
+      </div>
+    </td>
+    <td>
+      <div class="hora24-wrap">
+        <input type="hidden" data-f="horaFin">
+        <select class="hora24-h" onchange="syncHora24_(this)"><option value=""></option>${Array.from({length:24},(_,i)=>`<option>${String(i).padStart(2,'0')}</option>`).join('')}</select>
+        <span>:</span>
+        <select class="hora24-m" onchange="syncHora24_(this)"><option value=""></option>${Array.from({length:60},(_,i)=>`<option>${String(i).padStart(2,'0')}</option>`).join('')}</select>
+      </div>
+    </td>
     <td><input type="text" class="tag" data-f="tag" placeholder="EQUIPO"></td>
     <td><select data-f="tipo"><option value=""></option>${TIPO_MANTTO.map(t=>`<option>${t}</option>`).join('')}</select></td>
     <td><input type="text" data-f="modo" placeholder="Modo de falla"></td>
@@ -581,6 +603,14 @@ function addEventRow(area){
 }
 
 /* ---------- desplegable múltiple de técnicos por evento ---------- */
+function syncHora24_(sel){
+  const wrap = sel.closest('.hora24-wrap');
+  const hidden = wrap.querySelector('input[type=hidden]');
+  const h = wrap.querySelector('.hora24-h').value;
+  const m = wrap.querySelector('.hora24-m').value;
+  hidden.value = (h && m) ? `${h}:${m}` : '';
+}
+
 function toggleTecPanel(btn){
   const panel = btn.nextElementSibling;
   const yaAbierto = panel.classList.contains('show');
@@ -721,7 +751,13 @@ function populateForm(data){
       Object.keys(ev).forEach(key=>{
         const el = tr.querySelector(`[data-f="${key}"]`);
         if(!el) return;
-        if(key === 'tecnicos'){
+        if(key === 'horaIni' || key === 'horaFin'){
+          const wrap = el.closest('.hora24-wrap');
+          const partes = String(ev[key]||'').split(':');
+          wrap.querySelector('.hora24-h').value = partes[0] || '';
+          wrap.querySelector('.hora24-m').value = partes[1] || '';
+          el.value = ev[key] || '';
+        }else if(key === 'tecnicos'){
           const wrap = el.closest('.tec-multiselect');
           const seleccionados = String(ev[key]||'').split(',').map(n=>n.trim()).filter(Boolean);
           wrap.querySelectorAll('input[type=checkbox]').forEach(c => { c.checked = seleccionados.includes(c.value); });
@@ -951,8 +987,15 @@ function isoWeekToRange_(weekStr){
 function formatFecha_(iso){
   if(!iso) return '—';
   const p = iso.split('-');
-  if(p.length !== 3) return iso;
-  return `${p[2]}/${p[1]}/${p[0]}`;
+  if(p.length === 3 && /^\d{4}$/.test(p[0])){
+    return `${p[2].slice(0,2)}/${p[1]}/${p[0]}`;
+  }
+  // Formato inesperado (ej. texto largo de fecha): se intenta reinterpretar.
+  const d = new Date(iso);
+  if(!isNaN(d.getTime())){
+    return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+  }
+  return iso;
 }
 
 /* ---------- resumen de texto para compartir ---------- */
@@ -1158,6 +1201,7 @@ function computeIndicadores(records, filtros){
   AREAS.forEach(a => { porArea[a] = { day:0, week:0, month:0, year:0, totalDur:0, totalCount:0, evCount:0 }; });
 
   const equipoMap = {}; // acumulado por equipo (TAG), todo el histórico
+  const horasPorTecnico = {}; // { nombreTecnico: { dia:0, semana:0 } }, según eventos
 
   let totalEventos = 0;
   const weekRange = filtros.week ? isoWeekToRange_(filtros.week) : null;
@@ -1185,6 +1229,22 @@ function computeIndicadores(records, filtros){
         porArea[area].totalDur += mins;
         porArea[area].totalCount++;
 
+        // Horas por técnico: la duración de ESTE evento se atribuye a cada
+        // técnico que lo documentó (su propia hora inicio/fin del evento).
+        if(fecha){
+          const horas = mins/60;
+          const nombresEvento = (ev.tecnicos || '').split(',').map(n=>n.trim()).filter(Boolean);
+          nombresEvento.forEach(nombre=>{
+            if(!horasPorTecnico[nombre]) horasPorTecnico[nombre] = { dia:0, semana:0 };
+            if(filtros.day && fecha === filtros.day){
+              horasPorTecnico[nombre].dia = Math.min(horasPorTecnico[nombre].dia + horas, 8);
+            }
+            if(weekRange && fecha >= weekRange.start && fecha <= weekRange.end){
+              horasPorTecnico[nombre].semana += horas;
+            }
+          });
+        }
+
         if(!fecha) return;
         if(filtros.day && fecha === filtros.day) porArea[area].day += mins;
         if(weekRange && fecha >= weekRange.start && fecha <= weekRange.end) porArea[area].week += mins;
@@ -1198,7 +1258,12 @@ function computeIndicadores(records, filtros){
     .sort((a,b) => b.dur - a.dur)
     .slice(0,20);
 
-  return { totalEventos, porArea, topEquipos };
+  const filasHorasPorTecnico = Object.keys(horasPorTecnico)
+    .map(nombre => ({ nombre, ...horasPorTecnico[nombre] }))
+    .filter(f => f.dia > 0 || f.semana > 0)
+    .sort((a,b) => b.semana - a.semana);
+
+  return { totalEventos, porArea, topEquipos, filasHorasPorTecnico };
 }
 
 function renderIndicadores(){
@@ -1243,6 +1308,10 @@ function renderIndicadores(){
       <td class="mttr">${formatMinutos_(eq.dur)}</td>
     </tr>`).join('') : `<tr><td colspan="5" style="color:var(--muted);text-align:center;">Sin datos aún</td></tr>`;
 
+  const filasHorasTecnico = stats.filasHorasPorTecnico.length > 0 ? stats.filasHorasPorTecnico.map(f => `
+    <tr><td>${escapeHtml(f.nombre)}</td><td>${f.dia.toFixed(1)} h</td><td>${f.semana.toFixed(1)} h</td></tr>`).join('')
+    : `<tr><td colspan="3" style="color:var(--muted);text-align:center;">Sin horas registradas en el período seleccionado</td></tr>`;
+
   cont.innerHTML = `
     <button class="ind-refresh" onclick="loadIndicadores(true)">&#8635; Actualizar</button>
 
@@ -1266,6 +1335,15 @@ function renderIndicadores(){
         <tbody>${filasMttr}</tbody>
       </table>
     </div>
+
+    <div class="ind-section-title">Horas reportadas por técnico (según fecha seleccionada arriba)</div>
+    <div class="ind-table-wrap">
+      <table class="ind-table">
+        <thead><tr><th>Técnico</th><th>Horas día</th><th>Horas semana</th></tr></thead>
+        <tbody>${filasHorasTecnico}</tbody>
+      </table>
+    </div>
+    <p style="color:var(--muted);font-size:11.5px;margin-top:8px;">* Calculado a partir de la duración de cada evento (hora inicio - hora fin) que ese técnico documentó. El total diario se limita a 8 h por turno.</p>
 
     <div class="ind-section-title">Top 20 equipos con más tiempo en eventos (acumulado, todo el histórico)</div>
     <div class="ind-table-wrap">
